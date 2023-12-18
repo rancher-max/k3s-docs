@@ -13,14 +13,84 @@ Two nodes cannot have the same hostname.
 
 If multiple nodes will have the same hostname, or if hostnames may be reused by an automated provisioning system, use the `--with-node-id` option to append a random suffix for each node, or devise a unique name to pass with `--node-name` or `$K3S_NODE_NAME` for each node you add to the cluster.
 
+## Architecture
+
+K3s is available for the following architectures:
+- x86_64
+- armhf
+- arm64/aarch64
+- s390x
+
+:::warning ARM64 Page Size
+
+Prior to May 2023 releases (v1.24.14+k3s1, v1.25.10+k3s1, v1.26.5+k3s1, v1.27.2+k3s1), on `aarch64/arm64` systems, the OS must use a 4k page size. **RHEL9**, **Ubuntu**, **Raspberry PI OS**, and **SLES** all meet this requirement.
+
+:::
+
 ## Operating Systems
 
 K3s is expected to work on most modern Linux systems.
 
-Some OSs have specific requirements:
+Some OSs have additional setup requirements:
+<Tabs queryString="os">
+<TabItem value="rhel" label="Red Hat Enterprise Linux / CentOS / Fedora">
 
-- If you are using **(Red Hat/CentOS) Enterprise Linux**, follow [these steps](../advanced/advanced.md#red-hat-enterprise-linux--centos) for additional setup.
-- If you are using **Raspberry Pi OS**, follow [these steps](../advanced/advanced.md#raspberry-pi) to switch to legacy iptables.
+It is recommended to turn off firewalld:
+```bash
+systemctl disable firewalld --now
+```
+
+If you wish to keep firewalld enabled, by default, the following rules are required:
+```bash
+firewall-cmd --permanent --add-port=6443/tcp #apiserver
+firewall-cmd --permanent --zone=trusted --add-source=10.42.0.0/16 #pods
+firewall-cmd --permanent --zone=trusted --add-source=10.43.0.0/16 #services
+firewall-cmd --reload
+```
+
+Additional ports may need to be opened depending on your setup. See [Inbound Rules](#inbound-rules-for-k3s-server-nodes) for more information. If you change the default CIDR for pods or services, you will need to update the firewall rules accordingly.
+
+If enabled, it is required to disable nm-cloud-setup and reboot the node:
+```bash
+systemctl disable nm-cloud-setup.service nm-cloud-setup.timer
+reboot
+```
+</TabItem>
+<TabItem value="debian" label="Ubuntu / Debian">
+
+Older Debian release may suffer from a known iptables bug. See [Known Issues](../known-issues/known-issues.md#iptables).
+
+It is recommended to turn off ufw (uncomplicated firewall):
+```bash
+ufw disable
+```
+
+If you wish to keep ufw enabled, by default, the following rules are required:
+```bash
+ufw allow 6443/tcp #apiserver
+ufw allow from 10.42.0.0/16 to any #pods
+ufw allow from 10.43.0.0/16 to any #services
+```
+
+Additional ports may need to be opened depending on your setup. See [Inbound Rules](#inbound-rules-for-k3s-server-nodes) for more information. If you change the default CIDR for pods or services, you will need to update the firewall rules accordingly.
+</TabItem>
+<TabItem value="pi" label="Raspberry Pi">
+
+Raspberry Pi OS is Debian based, and may suffer from a known iptables bug. See [Known Issues](../known-issues/known-issues.md#iptables).
+
+Standard Raspberry Pi OS installations do not start with `cgroups` enabled. **K3S** needs `cgroups` to start the systemd service. `cgroups`can be enabled by appending `cgroup_memory=1 cgroup_enable=memory` to `/boot/cmdline.txt`.
+
+Example cmdline.txt:
+```
+console=serial0,115200 console=tty1 root=PARTUUID=58b06195-02 rootfstype=ext4 elevator=deadline fsck.repair=yes rootwait cgroup_memory=1 cgroup_enable=memory
+```
+
+Starting with Ubuntu 21.10, vxlan support on Raspberry Pi has been moved into a separate kernel module. 
+```bash
+sudo apt install linux-modules-extra-raspi
+```
+</TabItem>
+</Tabs>
 
 For more information on which OSs were tested with Rancher managed K3s clusters, refer to the [Rancher support and maintenance terms.](https://rancher.com/support-maintenance-terms/)
 
@@ -28,10 +98,16 @@ For more information on which OSs were tested with Rancher managed K3s clusters,
 
 Hardware requirements scale based on the size of your deployments. Minimum recommendations are outlined here.
 
-*    RAM: 512MB Minimum (we recommend at least 1GB)
-*    CPU: 1 Minimum
+| Spec | Minimum | Recommended |
+|------|---------|-------------|
+| CPU  | 1 core      | 2 cores          |
+| RAM  | 512 MB  | 1 GB        |
 
-[K3s Resource Profiling](../reference/resource-profiling.md) captures the results of tests to determine minimum resource requirements for the K3s agent, the K3s server with a workload, and the K3s server with one agent. It also contains analysis about what has the biggest impact on K3s server and agent utilization, and how the cluster datastore can be protected from interference from agents and workloads.
+[Resource Profiling](../reference/resource-profiling.md) captures the results of tests to determine minimum resource requirements for the K3s agent, the K3s server with a workload, and the K3s server with one agent. It also contains analysis about what has the biggest impact on K3s server and agent utilization, and how the cluster datastore can be protected from interference from agents and workloads.
+
+:::info Raspberry Pi and embedded etcd
+If deploying K3s with embedded etcd on a Raspberry Pi, it is recommended that you use an external SSD. etcd is write intensive, and SD cards cannot handle the IO load.
+:::
 
 #### Disks
 
@@ -41,16 +117,21 @@ K3s performance depends on the performance of the database. To ensure optimal sp
 
 The K3s server needs port 6443 to be accessible by all nodes.
 
-The nodes need to be able to reach other nodes over UDP port 8472 when Flannel VXLAN is used or over UDP ports 51820 and 51821 (when using IPv6) when Flannel Wireguard backend is used. The node should not listen on any other port. K3s uses reverse tunneling such that the nodes make outbound connections to the server and all kubelet traffic runs through that tunnel. However, if you do not use Flannel and provide your own custom CNI, then the ports needed by Flannel are not needed by K3s.
+The nodes need to be able to reach other nodes over UDP port 8472 when using the Flannel VXLAN backend, or over UDP port 51820 (and 51821 if IPv6 is used) when using the Flannel WireGuard backend. The node should not listen on any other port. K3s uses reverse tunneling such that the nodes make outbound connections to the server and all kubelet traffic runs through that tunnel. However, if you do not use Flannel and provide your own custom CNI, then the ports needed by Flannel are not needed by K3s.
 
 If you wish to utilize the metrics server, all nodes must be accessible to each other on port 10250.
 
 If you plan on achieving high availability with embedded etcd, server nodes must be accessible to each other on ports 2379 and 2380.
 
-> **Important:** The VXLAN port on nodes should not be exposed to the world as it opens up your cluster network to be accessed by anyone. Run your nodes behind a firewall/security group that disables access to port 8472.
-> **Warning:** Flannel relies on the [Bridge CNI plugin](https://www.cni.dev/plugins/current/main/bridge/) to create a L2 network that switches traffic. Rogue pods with NET_RAW capabilities can abuse that L2 network to launch attacks such as [ARP spoofing](https://static.sched.com/hosted_files/kccncna19/72/ARP%20DNS%20spoof.pdf). Therefore, as documented in the [kubernetes docs](https://kubernetes.io/docs/concepts/security/pod-security-standards/), please set a restricted profile that disables NET_RAW on non-trustable pods.
+:::tip Important
+The VXLAN port on nodes should not be exposed to the world as it opens up your cluster network to be accessed by anyone. Run your nodes behind a firewall/security group that disables access to port 8472.
+:::
 
-<figcaption>Inbound Rules for K3s Server Nodes</figcaption>
+:::danger
+Flannel relies on the [Bridge CNI plugin](https://www.cni.dev/plugins/current/main/bridge/) to create a L2 network that switches traffic. Rogue pods with `NET_RAW` capabilities can abuse that L2 network to launch attacks such as [ARP spoofing](https://static.sched.com/hosted_files/kccncna19/72/ARP%20DNS%20spoof.pdf). Therefore, as documented in the [Kubernetes docs](https://kubernetes.io/docs/concepts/security/pod-security-standards/), please set a restricted profile that disables `NET_RAW` on non-trustable pods.
+:::
+
+### Inbound Rules for K3s Server Nodes
 
 | Protocol | Port      | Source    | Destination | Description
 |----------|-----------|-----------|-------------|------------
@@ -61,7 +142,9 @@ If you plan on achieving high availability with embedded etcd, server nodes must
 | UDP      | 51820     | All nodes | All nodes   | Required only for Flannel Wireguard with IPv4
 | UDP      | 51821     | All nodes | All nodes   | Required only for Flannel Wireguard with IPv6
 
-Typically all outbound traffic is allowed.
+Typically, all outbound traffic is allowed.
+
+Additional changes to the firewall may be required depending on the OS used.
 
 ## Large Clusters
 
@@ -93,7 +176,9 @@ You should consider increasing the subnet size for the cluster CIDR so that you 
 
 ### Database
 
-K3s supports different databases including MySQL, PostgreSQL, MariaDB, and etcd, the following is a sizing guide for the database resources you need to run large clusters:
+K3s supports different databases including MySQL, PostgreSQL, MariaDB, and etcd.  See [Cluster Datastore](../datastore/datastore.md) for more info.
+
+The following is a sizing guide for the database resources you need to run large clusters:
 
 | Deployment Size |   Nodes   | VCPUS |  RAM  |
 |:---------------:|:---------:|:-----:|:-----:|
@@ -102,4 +187,3 @@ K3s supports different databases including MySQL, PostgreSQL, MariaDB, and etcd,
 |      Large      | Up to 250 |   4   | 16 GB |
 |     X-Large     | Up to 500 |   8   | 32 GB |
 |     XX-Large    |   500+    |   16  | 64 GB |
-

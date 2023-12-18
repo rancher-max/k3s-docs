@@ -11,9 +11,26 @@ module.exports = {
   organizationName: 'k3s-io', // Usually your GitHub org/user name.
   projectName: 'docs', // Usually your repo name.
   trailingSlash: false,
+  markdown: {
+    mermaid: true,
+  },
+  themes: [
+    '@docusaurus/theme-mermaid',
+    [
+      "@easyops-cn/docusaurus-search-local",
+      /** @type {import("@easyops-cn/docusaurus-search-local").PluginOptions} */
+      ({
+        docsRouteBasePath: "/",
+        hashed: true,
+        highlightSearchTermsOnTargetPage: true,
+        indexBlog: false,
+        ignoreFiles: [/release-notes\/.*/],
+      }),
+    ],
+  ],
   i18n: {
     defaultLocale: "en",
-    locales: ["en", "zh"],
+    locales: ["en", "zh", "kr"],
     localeConfigs: {
       en: {
         label: "English",
@@ -21,12 +38,17 @@ module.exports = {
       zh: {
         label: "简体中文",
       },
+      kr: {
+        label: "한국어",
+      },
     },
   },
   themeConfig: {
     colorMode: {
       // "light" | "dark"
       defaultMode: "light",
+      // Use user preference instead of default mode
+      respectPrefersColorScheme: true,
 
       // Hides the switch in the navbar
       // Useful if you want to support a single color mode
@@ -56,11 +78,11 @@ module.exports = {
         },
       ],
     },
-    algolia: {
-      appId: 'LLOD7N3LJA',
-      apiKey: '4637c26b2ca6b8aeaf99a3ee421fb35c',
-      indexName: 'k3s',
-    },
+    // algolia: {
+    //   appId: 'LLOD7N3LJA',
+    //   apiKey: '4637c26b2ca6b8aeaf99a3ee421fb35c',
+    //   indexName: 'k3s',
+    // },
     footer: {
       style: 'dark',
       links: [],
@@ -85,6 +107,22 @@ module.exports = {
         theme: {
           customCss: [require.resolve("./src/css/custom.css")],
         },
+      },
+    ],
+  ],
+  plugins: [
+    [
+      '@docusaurus/plugin-client-redirects',
+      {
+        redirects: [
+          { from: '/installation/ha', to: '/datastore/ha' },
+          { from: '/installation/ha-embedded', to: '/datastore/ha-embedded' },
+          { from: '/installation/datastore', to: '/datastore' },
+          { from: '/installation/disable-flags', to: '/installation/server-roles' },
+          { from: '/backup-restore/backup-restore', to: '/datastore/backup-restore' },
+          { from: '/reference/agent-config', to: '/cli/agent' },
+          { from: '/reference/server-config', to: '/cli/server' },
+        ],
       },
     ],
   ], 

@@ -2,8 +2,6 @@
 title: "Air-Gap Install"
 weight: 60
 ---
-import Tabs from '@theme/Tabs';
-import TabItem from '@theme/TabItem';
 
 You can install K3s in an air-gapped environment using two different methods. An air-gapped environment is any environment that is not directly connected to the Internet. You can either deploy a private registry and mirror docker.io, or you can manually deploy images such as for small clusters.
 
@@ -22,11 +20,11 @@ Once you have completed this, you may now go to the [Install K3s](#install-k3s) 
 
 ## Manually Deploy Images Method
 
-We are assuming you have created your nodes in your air-gap environment.
+We are assuming you have created your nodes in your air-gap environment and use containerd as container runtime.
 This method requires you to manually deploy the necessary images to each node and is appropriate for edge deployments where running a private registry is not practical.
 
 ### Prepare the Images Directory and K3s Binary
-Obtain the images tar file for your architecture from the [releases](https://github.com/rancher/k3s/releases) page for the version of K3s you will be running.
+Obtain the images tar file for your architecture from the [releases](https://github.com/k3s-io/k3s/releases) page for the version of K3s you will be running.
 
 Place the tar file in the `images` directory, for example:
 
@@ -35,20 +33,43 @@ sudo mkdir -p /var/lib/rancher/k3s/agent/images/
 sudo cp ./k3s-airgap-images-$ARCH.tar /var/lib/rancher/k3s/agent/images/
 ```
 
-Place the k3s binary at `/usr/local/bin/k3s` and ensure it is executable.
-
-Follow the steps in the next section to install K3s.
+Once you have completed this, you may now go to the [Install K3s](#install-k3s) section below.
 
 ## Install K3s
 
 ### Prerequisites
 
-- Before installing K3s, complete the [Private Registry Method](#private-registry-method) or the [Manually Deploy Images Method](#manually-deploy-images-method) above to prepopulate the images that K3s needs to install.
-- Download the K3s binary from the [releases](https://github.com/rancher/k3s/releases) page, matching the same version used to get the airgap images. Place the binary in `/usr/local/bin` on each air-gapped node and ensure it is executable.
+Before installing K3s, complete the [Private Registry Method](#private-registry-method) or the [Manually Deploy Images Method](#manually-deploy-images-method) above to prepopulate the images that K3s needs to install.
+
+#### Binaries
+- Download the K3s binary from the [releases](https://github.com/k3s-io/k3s/releases) page, matching the same version used to get the airgap images. Place the binary in `/usr/local/bin` on each air-gapped node and ensure it is executable.
 - Download the K3s install script at [get.k3s.io](https://get.k3s.io). Place the install script anywhere on each air-gapped node, and name it `install.sh`.
+
+#### Default Network Route
+If your nodes do not have an interface with a default route, a default route must be configured; even a black-hole route via a dummy interface will suffice. K3s requires a default route in order to auto-detect the node's primary IP, and for kube-proxy ClusterIP routing to function properly. To add a dummy route, do the following:
+  ```
+  ip link add dummy0 type dummy
+  ip link set dummy0 up
+  ip addr add 203.0.113.254/31 dev dummy0
+  ip route add default via 203.0.113.255 dev dummy0 metric 1000
+  ```
 
 When running the K3s script with the `INSTALL_K3S_SKIP_DOWNLOAD` environment variable, K3s will use the local version of the script and binary.
 
+#### SELinux RPM
+
+If you intend to deploy K3s with SELinux enabled, you will need also install the appropriate k3s-selinux RPM on all nodes. The latest version of the RPM can be found [here](https://github.com/k3s-io/k3s-selinux/releases/latest). For example, on CentOS 8:
+
+```bash
+On internet accessible machine:
+curl -LO https://github.com/k3s-io/k3s-selinux/releases/download/v1.4.stable.1/k3s-selinux-1.4-1.el8.noarch.rpm
+
+# Transfer RPM to air-gapped machine
+On air-gapped machine:
+sudo yum install ./k3s-selinux-1.4-1.el8.noarch.rpm
+```
+
+See the [SELinux](../advanced/advanced.md#selinux-support) section for more information.
 
 ### Installing K3s in an Air-Gapped Environment
 
@@ -63,34 +84,43 @@ To install K3s on a single server, simply do the following on the server node:
 INSTALL_K3S_SKIP_DOWNLOAD=true ./install.sh
 ```
 
-Then, to optionally add additional agents do the following on each agent node. Take care to ensure you replace `myserver` with the IP or valid DNS of the server and replace `mynodetoken` with the node token from the server typically at `/var/lib/rancher/k3s/server/node-token`
+To add additional agents, do the following on each agent node: 
 
 ```bash
-INSTALL_K3S_SKIP_DOWNLOAD=true K3S_URL=https://myserver:6443 K3S_TOKEN=mynodetoken ./install.sh
+INSTALL_K3S_SKIP_DOWNLOAD=true K3S_URL=https://<SERVER_IP>:6443 K3S_TOKEN=<YOUR_TOKEN> ./install.sh
 ```
+
+:::note
+The token from the server is typically found at `/var/lib/rancher/k3s/server/token`.
+:::
 
 </TabItem>
 <TabItem value="High Availability Configuration" default>
 
-Reference the [High Availability with an External DB](ha.md) or [High Availability with Embedded DB](ha-embedded.md) guides. You will be tweaking install commands so you specify `INSTALL_K3S_SKIP_DOWNLOAD=true` and run your install script locally instead of via curl. You will also utilize `INSTALL_K3S_EXEC='args'` to supply any arguments to k3s.
+Reference the [High Availability with an External DB](../datastore/ha.md) or [High Availability with Embedded DB](../datastore/ha-embedded.md) guides. You will be tweaking install commands so you specify `INSTALL_K3S_SKIP_DOWNLOAD=true` and run your install script locally instead of via curl. You will also utilize `INSTALL_K3S_EXEC='args'` to supply any arguments to k3s.
 
 For example, step two of the High Availability with an External DB guide mentions the following:
 
 ```bash
 curl -sfL https://get.k3s.io | sh -s - server \
-  --datastore-endpoint='mysql://username:password@tcp(hostname:3306)/database-name'
+  --token=SECRET \
+  --datastore-endpoint="mysql://username:password@tcp(hostname:3306)/database-name"
 ```
 
 Instead, you would modify such examples like below:
 
 ```bash
-INSTALL_K3S_SKIP_DOWNLOAD=true INSTALL_K3S_EXEC='server' K3S_DATASTORE_ENDPOINT='mysql://username:password@tcp(hostname:3306)/database-name' ./install.sh
+INSTALL_K3S_SKIP_DOWNLOAD=true INSTALL_K3S_EXEC='server --token=SECRET' \
+K3S_DATASTORE_ENDPOINT='mysql://username:password@tcp(hostname:3306)/database-name' \
+./install.sh
 ```
 
 </TabItem>
 </Tabs>
 
->**Note:** K3s additionally provides a `--resolv-conf` flag for kubelets, which may help with configuring DNS in air-gap networks.
+:::note
+K3s additionally provides a `--resolv-conf` flag for kubelets, which may help with configuring DNS in air-gap networks.
+:::
 
 ## Upgrading
 
@@ -98,7 +128,7 @@ INSTALL_K3S_SKIP_DOWNLOAD=true INSTALL_K3S_EXEC='server' K3S_DATASTORE_ENDPOINT=
 
 Upgrading an air-gap environment can be accomplished in the following manner:
 
-1. Download the new air-gap images (tar file) from the [releases](https://github.com/rancher/k3s/releases) page for the version of K3s you will be upgrading to. Place the tar in the `/var/lib/rancher/k3s/agent/images/` directory on each
+1. Download the new air-gap images (tar file) from the [releases](https://github.com/k3s-io/k3s/releases) page for the version of K3s you will be upgrading to. Place the tar in the `/var/lib/rancher/k3s/agent/images/` directory on each
 node. Delete the old tar file.
 2. Copy and replace the old K3s binary in `/usr/local/bin` on each node. Copy over the install script at https://get.k3s.io (as it is possible it has changed since the last release). Run the script again just as you had done in the past
 with the same environment variables.

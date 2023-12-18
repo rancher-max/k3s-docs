@@ -93,7 +93,7 @@ The status should be Bound for each.
 
 ## Setting up Longhorn
 
-:::caution
+:::warning
 
 Longhorn does not support ARM32.
 
@@ -107,7 +107,7 @@ Below we cover a simple example. For more information, refer to the [official do
 Apply the longhorn.yaml to install Longhorn:
 
 ```bash
-kubectl apply -f https://raw.githubusercontent.com/longhorn/longhorn/master/deploy/longhorn.yaml
+kubectl apply -f https://raw.githubusercontent.com/longhorn/longhorn/v1.5.1/deploy/longhorn.yaml
 ```
 
 Longhorn will be installed in the namespace `longhorn-system`.

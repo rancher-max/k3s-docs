@@ -2,8 +2,6 @@
 title: "Private Registry Configuration"
 weight: 55
 ---
-import Tabs from '@theme/Tabs';
-import TabItem from '@theme/TabItem';
 
 Containerd can be configured to connect to private registries and use them to pull private images on the node.
 
@@ -32,6 +30,21 @@ mirrors:
 ```
 
 Each mirror must have a name and set of endpoints. When pulling an image from a registry, containerd will try these endpoint URLs one by one, and use the first working one.
+
+#### Redirects
+
+If a public registry is used as a mirror, such as when configuring a [pull through cache](https://docs.docker.com/registry/recipes/mirror/), images pulls are transparently redirected.
+
+For example, if you have a mirror configured for `docker.io`:
+
+```yaml
+mirrors:
+  docker.io:
+    endpoint:
+      - "https://mycustomreg.com:5000"
+```
+
+Then pulling `docker.io/rancher/coredns-coredns:1.6.3` will transparently pull the image from `https://mycustomreg.com:5000/rancher/coredns-coredns:1.6.3`.
 
 #### Rewrites
 
@@ -151,14 +164,14 @@ In order for the registry changes to take effect, you need to restart K3s on eac
 
 ## Adding Images to the Private Registry
 
-First, obtain the k3s-images.txt file from GitHub for the release you are working with.
+First, obtain the `k3s-images.txt` file from GitHub for the release you are working with.
 Pull the K3s images listed on the k3s-images.txt file from docker.io
 
 Example: `docker pull docker.io/rancher/coredns-coredns:1.6.3`
 
 Then, retag the images to the private registry.
 
-Example: `docker tag coredns-coredns:1.6.3 mycustomreg:5000/coredns-coredns`
+Example: `docker tag rancher/coredns-coredns:1.6.3 mycustomreg.com:5000/coredns-coredns`
 
 Last, push the images to the private registry.
 
