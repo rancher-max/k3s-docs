@@ -26,7 +26,7 @@ Failure to follow proper procedure for rotating encryption keys can leave your c
 ### New Encryption Key Rotation (Expiremental)
 
 :::info Version Gate
-Available as of [v1.28.1+k3s1](https://github.com/k3s-io/k3s/releases/tag/v1.28.1%2Bk3s1). This new version of the tool utilized K8s [automatic config reloading](https://kubernetes.io/docs/tasks/administer-cluster/encrypt-data/#configure-automatic-reloading) which is currently in beta. GA is expected in v1.29.0
+Available as of [v1.28.1+k3s1](https://github.com/k3s-io/k3s/releases/tag/v1.28.1%2Bk3s1). This new version of the tool utilized K8s [automatic config reloading](https://kubernetes.io/docs/tasks/administer-cluster/encrypt-data/#configure-automatic-reloading) which was made GA in v1.29.0.
 
 For older releases, see [Encryption Key Rotation Classic](#encryption-key-rotation-classic)
 :::
